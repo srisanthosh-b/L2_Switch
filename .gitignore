@@ -1,0 +1,23 @@
+# Build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.symvers
+*.order
+*.cmd
+*.tmp
+*.log
+Module.symvers
+modules.order
+
+# Editor / OS files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Kernel build leftovers
+/.cache/
+
+# Local test outputs
+*.out

@@ -1,0 +1,55 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_OUTPUT_EXCMD	mixed	/number, pattern, mixed, or combineV2/
+!_TAG_OUTPUT_FILESEP	slash	/slash or backslash/
+!_TAG_OUTPUT_MODE	u-ctags	/u-ctags or e-ctags/
+!_TAG_PATTERN_LENGTH_LIMIT	96	/0 for no limit/
+!_TAG_PROC_CWD	/home/sri/Documents/mini_l2_switch/	//
+!_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
+!_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
+!_TAG_PROGRAM_URL	https://ctags.io/	/official site/
+!_TAG_PROGRAM_VERSION	5.9.0	//
+KDIR	Makefile	/^KDIR := \/lib\/modules\/$(shell uname -r)\/build$/;"	m
+MAC_HASH_BITS	l2switch.c	/^#define MAC_HASH_BITS /;"	d	file:
+MAX_PORTS	l2switch.c	/^#define MAX_PORTS /;"	d	file:
+PWD	Makefile	/^PWD  := $(shell pwd)$/;"	m
+____version_ext_crcs	l2switch.mod.c	/^static const u32 ____version_ext_crcs[]$/;"	v	typeref:typename:const u32[]__used __section ("__version_ext_crcs")	file:
+____version_ext_names	l2switch.mod.c	/^static const char ____version_ext_names[]$/;"	v	typeref:typename:const char[]__used __section ("__version_ext_names")	file:
+____versions	l2switch.mod.c	/^static const struct modversion_info ____versions[]$/;"	v	typeref:typename:const struct modversion_info[]__used __section ("__versions")	file:
+all	Makefile	/^all:$/;"	t
+broadcast	l2switch.c	/^    unsigned long broadcast;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
+clean	Makefile	/^clean:$/;"	t
+clear_mac_table	l2switch.c	/^static void clear_mac_table(void)$/;"	f	typeref:typename:void	file:
+dev	l2switch.c	/^    struct net_device *dev;$/;"	m	struct:mac_entry	typeref:struct:net_device *	file:
+dropped	l2switch.c	/^    unsigned long dropped;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
+flood_packet	l2switch.c	/^static void flood_packet(struct sk_buff *skb,$/;"	f	typeref:typename:void	file:
+flooded	l2switch.c	/^    unsigned long flooded;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
+forward_packet	l2switch.c	/^static void forward_packet(struct sk_buff *skb,$/;"	f	typeref:typename:void	file:
+forwarded	l2switch.c	/^    unsigned long forwarded;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
+get_port_index	l2switch.c	/^static int get_port_index(struct net_device *dev)$/;"	f	typeref:typename:int	file:
+l2switch_exit	l2switch.c	/^static void __exit l2switch_exit(void)$/;"	f	typeref:typename:void __exit	file:
+l2switch_hook	l2switch.c	/^static unsigned int l2switch_hook(void *priv,$/;"	f	typeref:typename:unsigned int	file:
+l2switch_init	l2switch.c	/^static int __init l2switch_init(void)$/;"	f	typeref:typename:int __init	file:
+last_seen	l2switch.c	/^    unsigned long last_seen;$/;"	m	struct:mac_entry	typeref:typename:unsigned long	file:
+learn_mac	l2switch.c	/^static void learn_mac(struct net_device *dev,$/;"	f	typeref:typename:void	file:
+lookup_mac	l2switch.c	/^static struct mac_entry *lookup_mac(const unsigned char *mac)$/;"	f	typeref:struct:mac_entry *	file:
+mac	l2switch.c	/^    unsigned char mac[ETH_ALEN];$/;"	m	struct:mac_entry	typeref:typename:unsigned char[]	file:
+mac_entry	l2switch.c	/^struct mac_entry {$/;"	s	file:
+mac_proc_open	l2switch.c	/^static int mac_proc_open(struct inode *inode,$/;"	f	typeref:typename:int	file:
+mac_proc_ops	l2switch.c	/^static const struct proc_ops mac_proc_ops = {$/;"	v	typeref:typename:const struct proc_ops	file:
+mac_proc_show	l2switch.c	/^static int mac_proc_show(struct seq_file *m,$/;"	f	typeref:typename:int	file:
+multicast	l2switch.c	/^    unsigned long multicast;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
+nf_ops	l2switch.c	/^static struct nf_hook_ops nf_ops[MAX_PORTS];$/;"	v	typeref:struct:nf_hook_ops[]	file:
+node	l2switch.c	/^    struct hlist_node node;$/;"	m	struct:mac_entry	typeref:struct:hlist_node	file:
+port0	l2switch.c	/^static char port0[IFNAMSIZ] = "swp0";$/;"	v	typeref:typename:char[]	file:
+port1	l2switch.c	/^static char port1[IFNAMSIZ] = "swp1";$/;"	v	typeref:typename:char[]	file:
+port2	l2switch.c	/^static char port2[IFNAMSIZ] = "swp2";$/;"	v	typeref:typename:char[]	file:
+port_stats	l2switch.c	/^struct port_stats {$/;"	s	file:
+proc_dir	l2switch.c	/^static struct proc_dir_entry *proc_dir;$/;"	v	typeref:struct:proc_dir_entry *	file:
+rx_packets	l2switch.c	/^    unsigned long rx_packets;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
+stats	l2switch.c	/^static struct port_stats stats[MAX_PORTS];$/;"	v	typeref:struct:port_stats[]	file:
+stats_proc_open	l2switch.c	/^static int stats_proc_open(struct inode *inode,$/;"	f	typeref:typename:int	file:
+stats_proc_ops	l2switch.c	/^static const struct proc_ops stats_proc_ops = {$/;"	v	typeref:typename:const struct proc_ops	file:
+stats_proc_show	l2switch.c	/^static int stats_proc_show(struct seq_file *m,$/;"	f	typeref:typename:int	file:
+tx_packets	l2switch.c	/^    unsigned long tx_packets;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
+unknown_unicast	l2switch.c	/^    unsigned long unknown_unicast;$/;"	m	struct:port_stats	typeref:typename:unsigned long	file:
