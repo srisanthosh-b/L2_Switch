@@ -8,3 +8,14 @@ all:
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
+
+load:
+	sudo insmod l2switch.ko+++
+
+unload:
+	sudo rmmod l2switch
+
+reload: unload load
+
+logs:
+	dmesg | tail -50
