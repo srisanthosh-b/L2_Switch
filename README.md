@@ -1,274 +1,176 @@
-# Mini L2 Switch
+# Mini VLAN-Aware L2 Switch
 
-This project is a small Linux kernel module that behaves like a basic Layer-2 Ethernet switch. It learns MAC addresses, forwards frames to the correct output port, floods unknown destinations, and exposes per-port statistics through procfs.
+This project is a small Linux kernel module that implements a learning Layer-2 Ethernet switch with static access-port VLANs. It is intended for kernel-networking experiments using Linux network namespaces and `veth` pairs.
 
-## Project architecture
+The module currently provides:
+
+- VLAN-aware source MAC learning
+- Known-unicast forwarding
+- Unknown-unicast flooding
+- Broadcast and multicast flooding
+- VLAN isolation between access ports
+- Per-port traffic counters
+- Procfs views for the MAC table and statistics
+- A procfs write interface for clearing the learned MAC table
+
+It does not implement 802.1Q tagged frames or trunk ports.
+
+## Topology
 
 ```mermaid
 flowchart LR
-    subgraph NS1[Namespace: pc1]
-        P1[eth0]
-    end
-    subgraph NS2[Namespace: pc2]
-        P2[eth0]
-    end
-    subgraph NS3[Namespace: pc3]
-        P3[eth0]
-    end
+    PC1[pc1: eth0\n10.0.0.1/24] --- V0[swp0\nVLAN 10]
+    PC2[pc2: eth0\n10.0.0.2/24] --- V1[swp1\nVLAN 10]
+    PC3[pc3: eth0\n10.0.0.3/24] --- V2[swp2\nVLAN 20]
 
-    subgraph SW[Kernel Module: l2switch]
-        L2[MAC learning table\nHash map + locks\nNetfilter ingress hooks]
-        FWD[Forward / Flood logic]
-        STATS[Port counters\nProcfs output]
+    subgraph Switch[Kernel module: l2switch]
+        Hook[Netfilter ingress hooks]
+        Table[VLAN + MAC hash table]
+        Logic[Forward or flood]
+        Proc[Procfs: mac, stats, clear]
+        Hook --> Table --> Logic
+        Table --> Proc
     end
 
-    V1[swp0]
-    V2[swp1]
-    V3[swp2]
-
-    P1 --> V1
-    P2 --> V2
-    P3 --> V3
-
-    V1 --> L2
-    V2 --> L2
-    V3 --> L2
-
-    L2 --> FWD
-    FWD --> V1
-    FWD --> V2
-    FWD --> V3
-    L2 --> STATS
+    V0 --> Hook
+    V1 --> Hook
+    V2 --> Hook
+    Logic --> V0
+    Logic --> V1
+    Logic --> V2
 ```
 
-This topology represents a three-port switch where each host is isolated in its own network namespace and connected through a `veth` pair. The kernel module sits between these interfaces and inspects every packet that enters the switch ports.
+| Switch port | Namespace peer | VLAN | Namespace address |
+| --- | --- | --- | --- |
+| `swp0` | `pc1` | 10 | `10.0.0.1/24` |
+| `swp1` | `pc2` | 10 | `10.0.0.2/24` |
+| `swp2` | `pc3` | 20 | `10.0.0.3/24` |
 
-## How the switch works
+The ports are static access ports. Frames arriving on `swp0` or `swp1` can be forwarded between those ports, while traffic arriving on `swp2` cannot cross into VLAN 10.
 
-1. A packet enters through one of the switch ports (`swp0`, `swp1`, or `swp2`).
-2. A `netfilter` ingress hook captures the packet before normal networking continues.
-3. The source MAC address is learned and mapped to the ingress port in the MAC table.
-4. The destination MAC is looked up in the MAC table.
-5. If the destination is known, the packet is forwarded to that port only.
-6. If the destination is unknown, the packet is flooded to all ports except the source port.
-7. Statistics such as forwarded, flooded, dropped, and transmitted packets are updated.
-8. The runtime state is exposed through procfs so it can be inspected from user space.
+## Packet-processing flow
 
-## Why this matters
+1. A Netfilter `NF_NETDEV_INGRESS` hook receives a frame on one of the configured switch ports.
+2. The module determines the ingress port and its configured VLAN.
+3. The source MAC is learned under a `(VLAN, MAC)` key. Multicast and broadcast source addresses are not learned.
+4. Broadcast, multicast, and unknown-unicast frames are flooded to other ports in the same VLAN.
+5. A known unicast frame is cloned and transmitted only to the learned destination port when that port belongs to the same VLAN.
+6. The original frame is dropped from the normal receive path because the module has handled the switching decision.
+7. Counters and the learned table can be inspected through procfs.
 
-A real Ethernet switch works at Layer 2, where decisions are based on MAC addresses rather than IP addresses. The module mirrors that idea by observing each frame, learning where the source MAC lives, and deciding where the destination should go.
+Forwarding uses cloned `sk_buff` objects, restores Ethernet header space when needed, and transmits clones with `dev_queue_xmit()`.
 
-This is the same principle used in hardware switches and software-defined networking components: maintain a forwarding table, reduce unnecessary traffic, and keep per-port statistics for observation and debugging.
+## Repository files
 
-## Real-world switch behavior reflected in this code
-
-- Source MAC learning: the switch remembers which source MAC belongs to which port.
-- Destination lookup: the switch checks whether the destination MAC is already in the table.
-- Unicast forwarding: a known destination is sent only to the matching port.
-- Broadcast flooding: a broadcast frame is sent to all switch ports.
-- Unknown unicast behavior: if no mapping exists, the frame is flooded to all ports.
-- Port statistics: counters track how many packets were forwarded, flooded, dropped, or transmitted.
-- Ingress and egress handling: packets are inspected at entry and then re-injected on the correct exit interface.
-
-## Additional technical concepts in the module
-
-### 14. Packet cloning and retransmission
-The module does not modify the original packet in place. Instead, it creates a cloned `sk_buff` for the output interface and sends that clone using `dev_queue_xmit()`. This is common in kernel networking because it allows the same packet to be forwarded to multiple destinations while preserving the original for further processing.
-
-### 15. Headroom management in `sk_buff`
-When re-injecting a packet onto a different interface, the code ensures that there is enough headroom for the Ethernet header before calling `skb_push()`. This is important because kernel packet buffers may not always be laid out in a way that allows immediate header insertion.
-
-### 16. Broadcast, multicast, and unknown-unicast handling
-The switch explicitly avoids learning multicast or broadcast source addresses and treats some packet categories differently. Real switches use similar logic to prevent wrong entries in the forwarding table and to reduce unnecessary flooding.
-
-### 17. User-space visibility through procfs
-The module exposes state through procfs instead of keeping everything internal. This makes debugging much easier because user-space tools can read switch tables and counters without instrumenting the kernel in a heavy way.
-
-### 18. Linux networking as a programmable environment
-The project demonstrates that Linux can be used as a networking lab platform. Interfaces, namespaces, veth pairs, packet hooks, and custom kernel logic can all be combined to simulate a switch in software without requiring physical hardware.
-
-## Technical concepts used
-
-### 1. Linux kernel module
-The switch is implemented as a loadable kernel module using:
-
-- `module_init()` and `module_exit()`
-- `MODULE_LICENSE`, `MODULE_AUTHOR`, `MODULE_DESCRIPTION`
-- kernel APIs such as `kmalloc`, `kfree`, and `pr_info`
-
-This is a classic example of how kernel code can extend the networking stack without changing the kernel source tree directly.
-
-### 2. Network namespaces
-The test topology uses Linux network namespaces to simulate separate hosts:
-
-- `pc1`, `pc2`, and `pc3` are created with `ip netns add`
-- Each namespace acts like an independent network stack
-- This is useful for testing switching and forwarding behavior without real physical hardware
-
-### 3. veth interfaces
-The switch ports are created as virtual Ethernet devices:
-
-- `swp0`, `swp1`, `swp2` are the switch-facing interfaces
-- Each has a peer interface moved into a namespace (`pc1eth`, `pc2eth`, `pc3eth`)
-- `veth` pairs are used to connect namespaces together as if they were connected by a cable
-
-This makes the lab environment look like a small 3-port switch with 3 hosts attached.
-
-### 4. MAC table and address learning
-The module maintains a MAC learning table that maps source MAC addresses to a switch port:
-
-- `struct mac_entry` stores `mac`, `dev`, and `last_seen`
-- `learn_mac()` inspects each incoming source MAC
-- If the MAC is new, it is inserted into the hash table
-- If the MAC already exists, the port mapping is updated
-
-This mimics the address-learning behavior of a real Ethernet switch.
-
-### 5. Hash table implementation
-The module uses the Linux kernel hash table API:
-
-- `DEFINE_HASHTABLE(mac_table, MAC_HASH_BITS)`
-- `hash_add`, `hash_for_each_possible`, `hash_for_each_safe`
-- `struct hlist_node` for chaining entries
-- `ether_addr_to_u64()` to derive a hash key from the MAC address
-
-This allows fast lookups and updates instead of scanning a linear array.
-
-### 6. Spin locks and concurrency safety
-Kernel code must protect shared state from concurrent access:
-
-- `DEFINE_SPINLOCK(mac_lock)`
-- `spin_lock_bh()` and `spin_unlock_bh()`
-- `mac_table` is protected because packets can arrive asynchronously on multiple ports
-
-This is an important concept in kernel networking where packet processing can happen concurrently.
-
-### 7. Proc filesystem
-The module exposes operational data via procfs:
-
-- `/proc/l2switch/mac` for the learned MAC table
-- `/proc/l2switch/stats` for switch counters
-- `proc_create_seq_private()` / `seq_file` style patterns are used in the kernel to read data safely
-
-This is a simple way to inspect runtime state from user space.
-
-### 8. Netfilter hooks
-The switch intercepts ingress traffic using Netfilter hooks:
-
-- `struct nf_hook_ops nf_ops[MAX_PORTS]`
-- `NF_NETDEV_INGRESS` is used to process packets when they enter a device
-- Hooks are registered for each switch port
-
-The module uses these hooks to monitor and redirect Ethernet packets before standard forwarding logic continues.
-
-### 9. Packet processing and switching behavior
-The core switch logic includes:
-
-- `learn_mac()` to record source MACs
-- `lookup_mac()` to find a destination port from the MAC table
-- `flood_packet()` to send a frame to all ports except the ingress port
-- `forward_packet()` to send the frame to the known destination port
-
-This matches the basic behavior of a Layer-2 switch:
-
-- learn source addresses
-- look up destination address
-- forward directly when known
-- broadcast/flood when unknown
-
-### 10. Ethernet frame handling
-Kernel packet processing revolves around `struct sk_buff` and network device metadata:
-
-- `skb_clone()` duplicates a packet for transmission
-- `skb_push()` restores Ethernet header space
-- `skb_reset_mac_header()` resets the MAC header pointer
-- `dev_queue_xmit()` sends the packet out a port
-- `skb->dev` and `clone->dev` define the input and output interfaces
-
-This is one of the most important technical concepts when working with Linux networking code.
-
-### 11. Device and port indexing
-The module maps interface names to port numbers using:
-
-- `get_port_index()`
-- `dev_get_by_name()`
-- `strcmp(dev->name, port0)` / `port1` / `port2`
-
-This maps each `net_device` to a logical switch port.
-
-### 12. Port statistics and counters
-The implementation tracks traffic counters per port:
-
-- `rx_packets`
-- `tx_packets`
-- `forwarded`
-- `flooded`
-- `dropped`
-- `broadcast`
-- `multicast`
-- `unknown_unicast`
-
-These counters help visualize how many frames crossed each port and whether they were forwarded or dropped.
-
-### 13. Kernel networking primitives and data structures
-The file uses several important Linux kernel networking primitives:
-
-- `struct net_device`
-- `struct sk_buff`
-- `struct hlist_node`
-- `struct nf_hook_ops`
-- `struct proc_dir_entry`
-- `jiffies` for timing information
-- `ETH_ALEN`, `ETH_HLEN`, and `IFNAMSIZ`
-
-This project is therefore a practical example of kernel-level packet filtering, forwarding, and state tracking.
-
-## File overview
-
-- `l2switch.c` — core kernel switch implementation
-- `Makefile` — builds the module for the running kernel
-- `setup.sh` — creates the namespace + veth test topology
-- `switchctl.sh` — reads MAC table and statistics from procfs
-- `cleanup.sh` — removes namespaces and switch interfaces
-- `.gitignore` — keeps generated kernel build artifacts out of Git
+- `l2switch.c` - kernel module implementation, VLAN mapping, MAC learning, forwarding, flooding, hooks, counters, and procfs handlers.
+- `Makefile` - builds and cleans the module against the running kernel's headers.
+- `setup.sh` - creates the three namespaces and `veth` topology, configures addresses, and brings interfaces up.
+- `switchctl.sh` - reads the MAC table and statistics, displays VLAN configuration, or clears the MAC table.
+- `cleanup.sh` - unloads the module and removes namespaces and switch interfaces.
+- `tags` - generated Ctags index; it is not required to build or run the switch.
 
 ## Requirements
 
-- Linux kernel headers for the running kernel
-- Root privileges (`sudo`)
-- A Linux system with `ip`, `ip netns`, and kernel module support
+Run this project on Linux. The current Windows workspace is suitable for editing, but building and loading the module requires a Linux kernel environment such as a native Linux host or VM.
 
-## Build
+You need:
+
+- A running Linux kernel with matching kernel headers
+- `make` and a C compiler
+- `iproute2` (`ip`, `ip netns`)
+- Root privileges or `sudo`
+- Kernel support for loadable modules, network namespaces, `veth`, Netfilter, and procfs
+
+## Build and run
+
+### 1. Build the module
 
 ```bash
 make
 ```
 
-## Create the test topology
+This produces `l2switch.ko` for the running kernel.
+
+### 2. Create the topology
 
 ```bash
 sudo ./setup.sh
 ```
 
-## Load the module
+The script creates `pc1`, `pc2`, and `pc3`, connects them to `swp0`, `swp1`, and `swp2`, and assigns the VLAN layout shown above.
+
+### 3. Load the module
 
 ```bash
 sudo insmod l2switch.ko
 ```
 
-## View switch data
+The default module parameters expect the interfaces `swp0`, `swp1`, and `swp2` to exist before loading. The port names can be overridden at load time:
 
 ```bash
-sudo ./switchctl.sh mac
-sudo ./switchctl.sh stats
+sudo insmod l2switch.ko port0=swp0 port1=swp1 port2=swp2
 ```
 
-## Remove topology and module
+### 4. Exercise the switch
+
+Traffic within VLAN 10 should work:
+
+```bash
+sudo ip netns exec pc1 ping -c 3 10.0.0.2
+```
+
+Traffic between VLAN 10 and VLAN 20 should be isolated:
+
+```bash
+sudo ip netns exec pc1 ping -c 3 10.0.0.3
+```
+
+The second command is expected to fail when the module is loaded and the topology is configured correctly.
+
+### 5. Inspect and clear runtime state
+
+```bash
+sudo ./switchctl.sh vlan
+sudo ./switchctl.sh mac
+sudo ./switchctl.sh stats
+sudo ./switchctl.sh clear
+```
+
+The equivalent procfs paths are:
+
+- `/proc/l2switch/mac` - learned MAC addresses, VLAN IDs, ports, and entry age.
+- `/proc/l2switch/stats` - per-port RX/TX, forwarding, flooding, drop, broadcast, multicast, unknown-unicast, and VLAN-drop counters.
+- `/proc/l2switch/clear` - any write clears the learned MAC table.
+
+Kernel messages can be viewed with:
+
+```bash
+dmesg | tail -50
+```
+
+### 6. Clean up
 
 ```bash
 sudo ./cleanup.sh
 ```
 
-## Notes
+The cleanup script attempts to unload `l2switch`, delete all three namespaces, and remove the switch-side `veth` interfaces.
 
-This project is intended for learning and experimentation in a Linux networking environment. It is not a production-ready switch implementation, but it demonstrates many core concepts used in real kernel networking and forwarding logic.
+## Make targets
+
+```bash
+make          # Build l2switch.ko
+make clean    # Remove kernel build artifacts
+make unload   # Remove the module
+make logs     # Show recent kernel messages
+```
+
+The Makefile also declares `load` and `reload` targets, but the current `load` recipe contains a trailing `+++` after the module filename. Use the direct `insmod` command above until that recipe is corrected. The load and unload operations require root privileges and an already-created topology.
+
+## Limitations
+
+- The VLAN configuration is compiled in: `swp0` and `swp1` use VLAN 10, and `swp2` uses VLAN 20.
+- VLANs are assigned by ingress port; there is no 802.1Q tag insertion, removal, or trunk support.
+- The module supports exactly three configured ports by default.
+- MAC entries are cleared manually or when the module is unloaded; there is no aging timer.
+- This is an educational kernel module, not a production switch implementation.
