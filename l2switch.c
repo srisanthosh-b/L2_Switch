@@ -489,8 +489,7 @@ static int flood_packet(struct sk_buff *skb,
         /*
          * Enter Linux transmit path.
          */
-        if (dev_queue_xmit(clone) == NET_XMIT_SUCCESS ||
-            dev_queue_xmit(clone) == NET_XMIT_CN) {
+        if (dev_queue_xmit(clone) == NET_XMIT_SUCCESS) {
 
             stats[i].tx_packets++;
 
